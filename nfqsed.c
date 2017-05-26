@@ -192,7 +192,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         // build up fake tcp syn header.
         // TODO: make configurable??
         tmp_tcp->sport = htons(21);
-        tmp_tcp->dport = htons(32767)
+        tmp_tcp->dport = htons(32767);
         tmp_tcp->seq = htonl((udp->sport<<16)|udp_dport); // a simple protocol to encode udp port to tcp seq.
         tmp_tcp->ack = htonl(1);
         tmp_tcp->off = 0x50; // 5*word, 20bits.
