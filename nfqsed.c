@@ -147,11 +147,8 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
     // Note: FW not allow this to pass, we must
     // extract payload and add a tcp header.
-    // tcp syn packet can have data, so we alway
-    // make a syn packet here.
-    // we must set vtun to use a static source port
-    // here in order to work correctly, otherwise
-    // we can't rebuild a correct udp header.
+    // tcp syn packet can have data, so we always
+    // make a tcp syn packet here.
     ip = (struct ip_hdr*) payload;
 
     if ((ip->proto != 17) && (ip->proto != 6)) {
@@ -174,12 +171,14 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         tmp_ip = (struct ip_hdr*) tmp_pkt;
         tmp_ip->proto = 6;
         tmp_ip->sum = 0;
+        // Fix up ip total length.
+        tmp_ip->len = udp_payload_len + sizeof(struct tcp_hdr) + ip_size;
         tmp_ip->sum = ip_sum(ip_size, tmp_ip);
         // copy udp payload, and leave space for tcp hdr.
         memcpy((uint8_t*)tmp_pkt+ip_size+sizeof(struct tcp_hdr),
                (uint8_t*)udp + sizeof(struct udp_hdr),
                udp_payload_len);
-        tmp_tcp = (struct tcp_hdr *)((uint8_t*)payload+ip_size);
+        tmp_tcp = (struct tcp_hdr *)((uint8_t*)tmp_pkt+ip_size);
         // build up fake tcp syn header.
         tmp_tcp->sport = udp->sport;
         tmp_tcp->dport = udp->dport;
@@ -193,10 +192,34 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         //fix up tmp len.
         tmp_len = ip_size + sizeof(struct tcp_hdr) + udp_payload_len;
     } else {
-        ip->proto = 17;
-        // udp no checksum.
-    }
+        struct ip_hdr *tmp_ip;
+        struct udp_hdr *tmp_udp;
+        struct tcp_hdr *tcp;
+        uint16_t tcp_payload_len;
 
+        ip_size = IP_HL(ip)*4;
+        tcp = (struct tcp_hdr*)((uint8_t*)payload + ip_size);
+        tcp_payload_len = ntohs(ip->len) - sizeof(struct tcp_hdr) - ip_size;
+        // build up ip header.
+        memcpy((uint8_t*)tmp_pkt, (uint8_t*)ip, ip_size);
+        tmp_ip = (struct ip_hdr*) tmp_pkt;
+        tmp_ip->proto = 17;
+        tmp_ip->sum = 0;
+        // Fix up ip total length.
+        tmp_ip->len = tcp_payload_len + sizeof(struct udp_hdr) + ip_size;
+        tmp_ip->sum = ip_sum(ip_size, tmp_ip);
+        // copy tcp payload, and leave space for udp hdr.
+        memcpy((uint8_t*)tmp_pkt+ip_size+sizeof(struct udp_hdr),
+               (uint8_t*)tcp + sizeof(struct tcp_hdr),
+               tcp_payload_len);
+        tmp_udp = (struct udp_hdr *)((uint8_t*)tmp_pkt+ip_size);
+        // build up fake tcp syn header.
+        tmp_udp->sport = tcp->sport;
+        tmp_udp->dport = tcp->dport;
+        tmp_udp->length = tcp_payload_len + sizeof(struct udp_hdr);
+        //fix up tmp len.
+        tmp_len = ip_size + sizeof(struct udp_hdr) + tcp_payload_len;
+    }
 
     /* ip_size = IP_HL(ip)*4; */
     /* tcp = (struct tcp_hdr*)(payload + ip_size); */
