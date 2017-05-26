@@ -119,7 +119,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     // filter own packet because it's a fake tcp...
     ip = (struct ip_hdr*) payload;
 
-    if ((ip->proto != 17) || (ip->proto != 6)) {
+    if ((ip->proto != 17) && (ip->proto != 6)) {
         // only tcp/udp is supported
         return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
     }
