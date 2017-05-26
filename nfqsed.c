@@ -118,11 +118,18 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     // udp packet, we will test whether firewall will
     // filter own packet because it's a fake tcp...
     ip = (struct ip_hdr*) payload;
-    if (ip->proto != 17) {
-        // only udp is supported
+
+    if ((ip->proto != 17) || (ip->proto != 6)) {
+        // only tcp/udp is supported
         return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
     }
-    ip->proto = 6; // TCP packet.
+
+    // Do the swap.
+    if (ip->proto == 17) {
+        ip->proto = 6;
+    } else {
+        ip->proto = 17;
+    }
     /* ip_size = IP_HL(ip)*4; */
     /* tcp = (struct tcp_hdr*)(payload + ip_size); */
     /* tcp_size = TH_OFF(tcp)*4; */
