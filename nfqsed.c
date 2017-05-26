@@ -149,6 +149,11 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     // extract payload and add a tcp header.
     // tcp syn packet can have data, so we always
     // make a tcp syn packet here.
+
+    // SYN packet with data not work because FW
+    // will limit the connection setup rate.
+    // We switch to FIN packet with data.
+
     ip = (struct ip_hdr*) payload;
 
     if ((ip->proto != 17) && (ip->proto != 6)) {
@@ -220,6 +225,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         tmp_udp->sport = tcp->sport;
         tmp_udp->dport = tcp->dport;
         tmp_udp->length = tcp_payload_len + sizeof(struct udp_hdr);
+        tmp_udp->sum = 0;//udp checksum zero is allowed.
         //fix up tmp len.
         tmp_len = ip_size + sizeof(struct udp_hdr) + tcp_payload_len;
     }
