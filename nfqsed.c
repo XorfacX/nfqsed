@@ -57,99 +57,15 @@ struct tcp_hdr {
 #define IP_HL(ip)   (((ip)->vhl) & 0x0f)
 #define TH_OFF(th)  (((th)->off & 0xf0) >> 4)
 
-struct rule_t {
-    uint8_t *val1;
-    uint8_t *val2;
-    int length;
-    struct rule_t *next;
-};
-
-struct rule_t *rules = NULL;
 int verbose = 0;
 int queue_num = 0;
 
 void usage()
 {
-    fprintf(stderr, "Usage: nfqsed -s /val1/val2 [-s /val1/val2] [-f file] [-v] [-q num]\n"
-            "  -s val1/val2     - replaces occurences of val1 with val2 in the packet payload\n"
-            "  -f file          - read replacement rules from the specified file\n"
+    fprintf(stderr, "Usage: nfqsed [-v] [-q num]\n"
             "  -q num           - bind to queue with number 'num' (default 0)\n"
             "  -v               - be verbose\n");
     exit(1);
-}
-
-void print_rule(const struct rule_t *rule)
-{
-    int i = 0;
-    for (i = 0 ; i < rule->length ; i++) {
-        printf("%x", rule->val1[i]);
-    }
-    printf(" -> ");
-    for (i = 0 ; i < rule->length ; i++) {
-        printf("%x", rule->val2[i]);
-    }
-    printf("\n");
-}
-
-void add_rule(const char *rule_str)
-{
-    char delim = rule_str[0];
-    char *pos = NULL;
-    int length = 0;
-    struct rule_t *rule;
-    if (strlen(rule_str) < 4) {
-        fprintf(stderr, "rule too short: %s\n", rule_str);
-        exit(1);
-    }
-    pos = strchr(rule_str+1, delim);
-    if (!pos) {
-        fprintf(stderr, "incorrect rule: %s\n", rule_str);
-        exit(1);
-    }
-    length = strlen(pos+1);
-    if (pos - rule_str - 1 != length) {
-        fprintf(stderr, "val1 and val2 must be the same length: %s\n", rule_str);
-        exit(1);
-    }
-    rule = malloc(sizeof(struct rule_t));
-    rule->val1 = malloc(length);
-    memcpy(rule->val1, rule_str + 1, length);
-    rule->val2 = malloc(length);
-    memcpy(rule->val2, pos + 1, length);
-    rule->length = length;
-    rule->next = NULL;
-    if (rules) {
-        rule->next = rules;
-        rules = rule;
-    } else {
-        rules = rule;
-    }
-}
-
-void load_rules(const char *rules_file)
-{
-    FILE *f;
-    char *line = NULL;
-    size_t len = 0;
-    ssize_t read;
-
-    f = fopen(rules_file, "r");
-    if (!f) {
-        fprintf(stderr, "cannot open %s", rules_file);
-        exit(1);
-    }
-    while ((read = getline(&line, &len, f)) != -1) {
-        if (line[0] == '#' || read == 1) {
-            // skip comments and empty lines
-            continue;
-        }
-        if (line[read-1] == '\n') {
-            line[read-1] = 0;
-        }
-        add_rule(line);
-    }
-    free(line);
-    fclose(f);
 }
 
 uint16_t tcp_sum(uint16_t len_tcp, uint16_t *src_addr, uint16_t *dest_addr, uint8_t *buff)
@@ -177,25 +93,6 @@ uint16_t tcp_sum(uint16_t len_tcp, uint16_t *src_addr, uint16_t *dest_addr, uint
     return htons((uint16_t) sum);
 }
 
-uint8_t *find(const struct rule_t *rule, uint8_t *payload, int payload_length)
-{
-    int rule_len = rule->length;
-    int i = 0, j = 0, match = 0;
-    for (i = 0 ; i < payload_length - rule_len ; i++) {
-        match = 1;
-        for (j = 0 ; j < rule_len ; j++) {
-            if (payload[i+j] != rule->val1[j]) {
-                match = 0;
-                break;
-            }
-        }
-        if (match) {
-            return payload + i;
-        }
-    }
-    return NULL;
-}
-
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
               struct nfq_data *nfa, void *data)
 {
@@ -205,7 +102,6 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     struct ip_hdr *ip;
     struct tcp_hdr *tcp;
     uint16_t ip_size = 0, tcp_size = 0;
-    struct rule_t *rule = rules;
 
     ph = nfq_get_msg_packet_hdr(nfa);
     if (ph) {
@@ -216,28 +112,23 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         fprintf(stderr, "Error getting payload\n");
         return len;
     }
+
+    // ZDY:
+    // change udp protocol to tcp protocol if this is a
+    // udp packet, we will test whether firewall will
+    // filter own packet because it's a fake tcp...
     ip = (struct ip_hdr*) payload;
-    if (ip->proto != 6) {
-        // only tcp is supported
+    if (ip->proto != 17) {
+        // only udp is supported
         return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
     }
-    ip_size = IP_HL(ip)*4;
-    tcp = (struct tcp_hdr*)(payload + ip_size);
-    tcp_size = TH_OFF(tcp)*4;
-    tcp_payload = (uint8_t*)(payload + ip_size + tcp_size);
-    
-    while (rule) {
-        while ((pos = find(rule, tcp_payload, len - ip_size - tcp_size)) != NULL) {
-            if (verbose) {
-                printf("rule match, changing payload: ");
-                print_rule(rule);
-            }
-            memcpy(pos, rule->val2, rule->length);
-        }
-        rule = rule->next;
-    }
-    tcp->sum = 0;
-    tcp->sum = tcp_sum(len-ip_size, ip->src, ip->dst, (uint8_t*) tcp);
+    ip->proto = 6; // TCP packet.
+    /* ip_size = IP_HL(ip)*4; */
+    /* tcp = (struct tcp_hdr*)(payload + ip_size); */
+    /* tcp_size = TH_OFF(tcp)*4; */
+    /* tcp_payload = (uint8_t*)(payload + ip_size + tcp_size); */
+    /* tcp->sum = 0; */
+    /* tcp->sum = tcp_sum(len-ip_size, ip->src, ip->dst, (uint8_t*) tcp); */
     return nfq_set_verdict(qh, id, NF_ACCEPT, len, payload);
 }
 
@@ -306,16 +197,10 @@ void read_queue()
 int main(int argc, char *argv[])
 {
     int opt;
-    while ((opt = getopt(argc, argv, "vs:f:q:")) != -1) {
+    while ((opt = getopt(argc, argv, "vq:")) != -1) {
         switch (opt) {
             case 'v':
                 verbose = 1;
-                break;
-            case 's':
-                add_rule(optarg);
-                break;
-            case 'f':
-                load_rules(optarg);
                 break;
             case 'q':
                 queue_num = atoi(optarg);
@@ -324,19 +209,7 @@ int main(int argc, char *argv[])
                 usage();
         }
     }
-    if (!rules) {
-        fprintf(stderr, "no rules defined, exiting\n");
-        return 1;
-    }
-    if (verbose) {
-        struct rule_t *rule = rules;
-        printf("Rules (in hex):\n");
-        while (rule) {
-            printf("  ");
-            print_rule(rule);
-            rule = rule->next;
-        }
-    }
+
     read_queue();
     return 0;
 }
