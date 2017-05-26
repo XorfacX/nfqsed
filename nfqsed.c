@@ -193,7 +193,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         tmp_tcp->sport = udp->sport;
         tmp_tcp->dport = udp->dport;
         tmp_tcp->seq = 0;
-        tmp_tcp->ack = 0;
+        tmp_tcp->ack = 1;
         tmp_tcp->off = 0x50; // 5*word, 20bits.
         tmp_tcp->flags = tcp_flags;
         tmp_tcp->win = htons(1500); // any value is ok.
