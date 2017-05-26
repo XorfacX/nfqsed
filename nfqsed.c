@@ -176,7 +176,9 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         tmp_ip->sum = 0;
         tmp_ip->sum = ip_sum(ip_size, tmp_ip);
         // copy udp payload, and leave space for tcp hdr.
-        memcpy((uint8_t*)tmp_pkt+ip_size+sizeof(struct tcp_hdr), (uint8_t*)udp + sizeof(struct udp_hdr), payload);
+        memcpy((uint8_t*)tmp_pkt+ip_size+sizeof(struct tcp_hdr),
+               (uint8_t*)udp + sizeof(struct udp_hdr),
+               udp_payload_len);
         tmp_tcp = (struct tcp_hdr *)((uint8_t*)payload+ip_size);
         // build up fake tcp syn header.
         tmp_tcp->sport = udp->sport;
