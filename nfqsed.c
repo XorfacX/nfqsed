@@ -224,7 +224,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         // build up fake tcp syn header.
         tmp_udp->sport = tcp->sport;
         tmp_udp->dport = tcp->dport;
-        tmp_udp->length = tcp_payload_len + sizeof(struct udp_hdr);
+        tmp_udp->length = htons(tcp_payload_len + sizeof(struct udp_hdr));
         tmp_udp->sum = 0;//udp checksum zero is allowed.
         //fix up tmp len.
         tmp_len = ip_size + sizeof(struct udp_hdr) + tcp_payload_len;
