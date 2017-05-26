@@ -15,7 +15,8 @@ iptables -t mangle -A POSTROUTING -d 45.77.29.109 -p udp  -j NFQUEUE --queue-num
 ### FW NODE
 
 iptables -t mangle -A INPUT -p tcp --sport 21  -j NFQUEUE --queue-num 0
-iptables -t mangle -A POSTROUTING -p udp -j NFQUEUE --queue-num 0
+# must configure dest to prevent corupt dns packet.
+iptables -t mangle -A POSTROUTING -p udp -d 183.245.146.51 -j NFQUEUE --queue-num 0
 
 
 ### DEBUG

@@ -172,6 +172,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         struct tcp_hdr *tmp_tcp;
         struct udp_hdr *udp;
         uint16_t udp_payload_len;
+        uint32_t ack;
 
         ip_size = IP_HL(ip)*4;
         udp = (struct udp_hdr*)((uint8_t*)payload + ip_size);
@@ -194,7 +195,9 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         tmp_tcp->sport = htons(21);
         tmp_tcp->dport = htons(32767);
         tmp_tcp->seq = 0;
-        tmp_tcp->ack = htonl((ntohs(udp->sport)<<16)|ntohs(udp->dport));
+        ack = ntohs(udp->sport);
+        ack = ack<<16 | ntohs(udp->dport);
+        tmp_tcp->ack = htonl(ack);
         tmp_tcp->off = 0x50; // 5*word, 20bits.
         tmp_tcp->flags = tcp_flags;
         tmp_tcp->win = htons(1500); // any value is ok.
