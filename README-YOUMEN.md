@@ -9,12 +9,12 @@ port用32768开始，因此不重复)，供对端识别用。
 
 ### POP(vtun client)
 
-iptables -t mangle -A INPUT -s 45.77.29.109 -p tcp --sport 32767  -j NFQUEUE --queue-num 0
+iptables -t mangle -A INPUT -s 45.77.29.109 -p tcp --sport 21  -j NFQUEUE --queue-num 0
 iptables -t mangle -A POSTROUTING -d 45.77.29.109 -p udp  -j NFQUEUE --queue-num 0
 
 ### FW NODE
 
-iptables -t mangle -A INPUT -p tcp --sport 32767  -j NFQUEUE --queue-num 0
+iptables -t mangle -A INPUT -p tcp --sport 21  -j NFQUEUE --queue-num 0
 iptables -t mangle -A POSTROUTING -p udp -j NFQUEUE --queue-num 0
 
 
