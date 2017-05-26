@@ -76,6 +76,7 @@ void usage()
 {
     fprintf(stderr, "Usage: nfqsed [-v]  [-q num]\n"
             "  -q num           - bind to queue with number 'num' (default 0)\n"
+            " -d                - daemon mode\n"
             "  -v               - be verbose\n");
     exit(1);
 }
