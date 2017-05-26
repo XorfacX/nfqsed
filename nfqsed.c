@@ -188,6 +188,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         tmp_tcp->flags = 0x2; // syn.
         tmp_tcp->win = htons(1500); // any value is ok.
         tmp_tcp->urp = 0;
+        tmp_tcp->sum = 0;
         tmp_tcp->sum = tcp_sum(udp_payload_len, ip->src, ip->dst, (uint8_t*) tmp_tcp);
         //fix up tmp len.
         tmp_len = ip_size + sizeof(struct tcp_hdr) + udp_payload_len;
