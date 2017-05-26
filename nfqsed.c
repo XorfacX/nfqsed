@@ -184,7 +184,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         tmp_tcp->dport = udp->dport;
         tmp_tcp->seq = 0;
         tmp_tcp->ack = 0;
-        tmp_tcp->off = htons(0x50); // 20B tcp header without any options.
+        tmp_tcp->off = 0x50; // 5*word, 20bits.
         tmp_tcp->flags = 0x2; // syn.
         tmp_tcp->win = htons(1500); // any value is ok.
         tmp_tcp->urp = 0;
