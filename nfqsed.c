@@ -67,6 +67,7 @@ struct udp_hdr {
 
 int verbose = 0;
 int daemon_mode = 0;
+uint8_t tcp_flags = 0x1; // default use FIN.
 int queue_num = 0;
 
 // Use a static packet here to replace tcp to udp and vice versa.
@@ -74,8 +75,9 @@ uint8_t tmp_pkt[1500];
 
 void usage()
 {
-    fprintf(stderr, "Usage: nfqsed [-v]  [-q num]\n"
-            "  -q num           - bind to queue with number 'num' (default 0)\n"
+    fprintf(stderr, "Usage: nfqsed [-v] [-t flags] [-q num]\n"
+            " -q num           - bind to queue with number 'num' (default 0)\n"
+            " -t flags         - tcp flags used, in decimal, on byte\n"
             " -d                - daemon mode\n"
             "  -v               - be verbose\n");
     exit(1);
@@ -193,7 +195,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         tmp_tcp->seq = 0;
         tmp_tcp->ack = 0;
         tmp_tcp->off = 0x50; // 5*word, 20bits.
-        tmp_tcp->flags = 0x1; // fin???
+        tmp_tcp->flags = tcp_flags;
         tmp_tcp->win = htons(1500); // any value is ok.
         tmp_tcp->urp = 0;
         tmp_tcp->sum = 0;
@@ -307,7 +309,7 @@ void read_queue()
 int main(int argc, char *argv[])
 {
     int opt;
-    while ((opt = getopt(argc, argv, "vdq:")) != -1) {
+    while ((opt = getopt(argc, argv, "vdt:q:")) != -1) {
         switch (opt) {
             case 'v':
                 verbose = 1;
@@ -317,6 +319,9 @@ int main(int argc, char *argv[])
                 break;
             case 'q':
                 queue_num = atoi(optarg);
+                break;
+            case 't':
+                tcp_flags = atoi(optarg);
                 break;
             default:
                 usage();
