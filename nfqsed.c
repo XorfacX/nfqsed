@@ -172,7 +172,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         tmp_ip->proto = 6;
         tmp_ip->sum = 0;
         // Fix up ip total length.
-        tmp_ip->len = udp_payload_len + sizeof(struct tcp_hdr) + ip_size;
+        tmp_ip->len = htons(udp_payload_len + sizeof(struct tcp_hdr) + ip_size);
         tmp_ip->sum = ip_sum(ip_size, tmp_ip);
         // copy udp payload, and leave space for tcp hdr.
         memcpy((uint8_t*)tmp_pkt+ip_size+sizeof(struct tcp_hdr),
@@ -206,7 +206,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         tmp_ip->proto = 17;
         tmp_ip->sum = 0;
         // Fix up ip total length.
-        tmp_ip->len = tcp_payload_len + sizeof(struct udp_hdr) + ip_size;
+        tmp_ip->len = htons(tcp_payload_len + sizeof(struct udp_hdr) + ip_size);
         tmp_ip->sum = ip_sum(ip_size, tmp_ip);
         // copy tcp payload, and leave space for udp hdr.
         memcpy((uint8_t*)tmp_pkt+ip_size+sizeof(struct udp_hdr),
