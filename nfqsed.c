@@ -23,6 +23,7 @@ THE SOFTWARE.
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <linux/types.h>
 #include <linux/netfilter.h>            /* for NF_ACCEPT */
@@ -65,6 +66,7 @@ struct udp_hdr {
 #define TH_OFF(th)  (((th)->off & 0xf0) >> 4)
 
 int verbose = 0;
+int daemon_mode = 0;
 int queue_num = 0;
 
 // Use a static packet here to replace tcp to udp and vice versa.
@@ -304,10 +306,13 @@ void read_queue()
 int main(int argc, char *argv[])
 {
     int opt;
-    while ((opt = getopt(argc, argv, "vq:")) != -1) {
+    while ((opt = getopt(argc, argv, "vdq:")) != -1) {
         switch (opt) {
             case 'v':
                 verbose = 1;
+                break;
+            case 'd':
+                daemon_mode = 1;
                 break;
             case 'q':
                 queue_num = atoi(optarg);
@@ -317,7 +322,24 @@ int main(int argc, char *argv[])
         }
     }
 
+    if( daemon_mode ){
+        int fd;
+
+        if(fork())
+            exit(0);
+
+        /* Direct stdin,stdout,stderr to '/dev/null' */
+        fd = open("/dev/null", O_RDWR);
+        close(0); dup(fd);
+        close(1); dup(fd);
+        close(2); dup(fd);
+        close(fd);
+
+        setsid();
+
+        chdir("/");
+    }
+
     read_queue();
     return 0;
 }
-
