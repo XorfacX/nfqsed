@@ -54,18 +54,45 @@ struct tcp_hdr {
     uint16_t urp;
 };
 
+struct udp_hdr {
+    uint16_t sport;
+    uint16_t dport;
+    uint16_t length;
+    uint16_t sum;
+};
+
 #define IP_HL(ip)   (((ip)->vhl) & 0x0f)
 #define TH_OFF(th)  (((th)->off & 0xf0) >> 4)
 
 int verbose = 0;
 int queue_num = 0;
 
+// Use a static packet here to replace tcp to udp and vice versa.
+uint8_t tmp_pkt[1500];
+
 void usage()
 {
-    fprintf(stderr, "Usage: nfqsed [-v] [-q num]\n"
+    fprintf(stderr, "Usage: nfqsed [-v]  [-q num]\n"
             "  -q num           - bind to queue with number 'num' (default 0)\n"
             "  -v               - be verbose\n");
     exit(1);
+}
+
+uint16_t ip_sum(uint16_t len_ip_hdr, uint8_t *buff) {
+    uint32_t sum = 0;
+    int i = 0;
+
+    for (i=0; i<(len_ip_hdr/2); i++) {
+        sum += ntohs((buff[i*2+1] << 8) | buff[i*2]);
+    }
+    if ((len_ip_hdr % 2) == 1) {
+        sum += buff[len_ip_hdr-1] << 8;
+    }
+    while (sum >> 16) {
+        sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+    sum = ~sum;
+    return htons((uint16_t) sum);
 }
 
 uint16_t tcp_sum(uint16_t len_tcp, uint16_t *src_addr, uint16_t *dest_addr, uint8_t *buff)
@@ -96,7 +123,7 @@ uint16_t tcp_sum(uint16_t len_tcp, uint16_t *src_addr, uint16_t *dest_addr, uint
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
               struct nfq_data *nfa, void *data)
 {
-    int id = 0, len = 0;
+    int id = 0, len = 0, tmp_len = 0;
     struct nfqnl_msg_packet_hdr *ph;
     uint8_t *payload=NULL, *tcp_payload, *pos;
     struct ip_hdr *ip;
@@ -117,6 +144,14 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     // change udp protocol to tcp protocol if this is a
     // udp packet, we will test whether firewall will
     // filter own packet because it's a fake tcp...
+
+    // Note: FW not allow this to pass, we must
+    // extract payload and add a tcp header.
+    // tcp syn packet can have data, so we alway
+    // make a syn packet here.
+    // we must set vtun to use a static source port
+    // here in order to work correctly, otherwise
+    // we can't rebuild a correct udp header.
     ip = (struct ip_hdr*) payload;
 
     if ((ip->proto != 17) && (ip->proto != 6)) {
@@ -126,17 +161,48 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
     // Do the swap.
     if (ip->proto == 17) {
-        ip->proto = 6;
+        struct ip_hdr *tmp_ip;
+        struct tcp_hdr *tmp_tcp;
+        struct udp_hdr *udp;
+        uint16_t udp_payload_len;
+
+        ip_size = IP_HL(ip)*4;
+        udp = (struct udp_hdr*)((uint8_t*)payload + ip_size);
+        udp_payload_len = ntohs(udp->length) - sizeof(struct udp_hdr);
+        // build up ip header.
+        memcpy((uint8_t*)tmp_pkt, (uint8_t*)ip, ip_size);
+        tmp_ip = (struct ip_hdr*) tmp_pkt;
+        tmp_ip->proto = 6;
+        tmp_ip->sum = 0;
+        tmp_ip->sum = ip_sum(ip_size, tmp_ip);
+        // copy udp payload, and leave space for tcp hdr.
+        memcpy((uint8_t*)tmp_pkt+ip_size+sizeof(struct tcp_hdr), (uint8_t*)udp + sizeof(struct udp_hdr), payload);
+        tmp_tcp = (struct tcp_hdr *)((uint8_t*)payload+ip_size);
+        // build up fake tcp syn header.
+        tmp_tcp->sport = udp->sport;
+        tmp_tcp->dport = udp->dport;
+        tmp_tcp->seq = 0;
+        tmp_tcp->ack = 0;
+        tmp_tcp->off = htons(0x50); // 20B tcp header without any options.
+        tmp_tcp->flags = 0x2; // syn.
+        tmp_tcp->win = htons(1500); // any value is ok.
+        tmp_tcp->urp = 0;
+        tmp_tcp->sum = tcp_sum(udp_payload_len, ip->src, ip->dst, (uint8_t*) tmp_tcp);
+        //fix up tmp len.
+        tmp_len = ip_size + sizeof(struct tcp_hdr) + udp_payload_len;
     } else {
         ip->proto = 17;
+        // udp no checksum.
     }
+
+
     /* ip_size = IP_HL(ip)*4; */
     /* tcp = (struct tcp_hdr*)(payload + ip_size); */
     /* tcp_size = TH_OFF(tcp)*4; */
     /* tcp_payload = (uint8_t*)(payload + ip_size + tcp_size); */
     /* tcp->sum = 0; */
     /* tcp->sum = tcp_sum(len-ip_size, ip->src, ip->dst, (uint8_t*) tcp); */
-    return nfq_set_verdict(qh, id, NF_ACCEPT, len, payload);
+    return nfq_set_verdict(qh, id, NF_ACCEPT, tmp_len, tmp_pkt);
 }
 
 void read_queue()
