@@ -190,9 +190,10 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
                udp_payload_len);
         tmp_tcp = (struct tcp_hdr *)((uint8_t*)tmp_pkt+ip_size);
         // build up fake tcp syn header.
-        tmp_tcp->sport = udp->sport;
-        tmp_tcp->dport = udp->dport;
-        tmp_tcp->seq = 0;
+        // TODO: make configurable??
+        tmp_tcp->sport = htons(21);
+        tmp_tcp->dport = htons(32767)
+        tmp_tcp->seq = htonl((udp->sport<<16)|udp_dport); // a simple protocol to encode udp port to tcp seq.
         tmp_tcp->ack = htonl(1);
         tmp_tcp->off = 0x50; // 5*word, 20bits.
         tmp_tcp->flags = tcp_flags;
@@ -227,8 +228,9 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
                tcp_payload_len);
         tmp_udp = (struct udp_hdr *)((uint8_t*)tmp_pkt+ip_size);
         // build up fake tcp syn header.
-        tmp_udp->sport = tcp->sport;
-        tmp_udp->dport = tcp->dport;
+        // recover udp s/p port from tcp seq.
+        tmp_udp->sport = ntohl(tcp->seq)>>16;
+        tmp_udp->dport = ntohl(tcp->seq) & 0xffff;
         tmp_udp->length = htons(tcp_payload_len + sizeof(struct udp_hdr));
         tmp_udp->sum = 0;//udp checksum zero is allowed.
         //fix up tmp len.
